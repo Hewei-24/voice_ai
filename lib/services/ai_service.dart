@@ -1,121 +1,112 @@
+// lib/services/ai_service.dart
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:voice_ai/config/api_config.dart';
 
 class AIService extends ChangeNotifier {
-  String _apiKey = '';
-  String _apiUrl = 'https://api.openai.com/v1/chat/completions';
   String _currentResponse = '';
   bool _isLoading = false;
-  String _selectedModel = 'gpt-3.5-turbo';
+  String? _error;
+  final List<Map<String, String>> _history = [];
 
   String get currentResponse => _currentResponse;
   bool get isLoading => _isLoading;
-
-  AIService() {
-    _loadApiKey();
-  }
-
-  Future<void> _loadApiKey() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      _apiKey = prefs.getString('openai_api_key') ?? '';
-    } catch (e) {
-      if (kDebugMode) {
-        print('加载API密钥失败: $e');
-      }
-    }
-  }
-
-  Future<void> saveApiKey(String apiKey) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('openai_api_key', apiKey);
-      _apiKey = apiKey;
-      notifyListeners();
-    } catch (e) {
-      if (kDebugMode) {
-        print('保存API密钥失败: $e');
-      }
-    }
-  }
+  String? get error => _error;
+  List<Map<String, String>> get history => _history;
 
   Future<String> getAIResponse(String question, {String? context}) async {
-    if (_apiKey.isEmpty) {
-      return '请先设置API密钥';
+    final apiConfig = APIConfig();
+
+    if (!apiConfig.isConfigured) {
+      _error = '请先在设置中配置有效的API密钥';
+      notifyListeners();
+      return _error!;
     }
 
     _isLoading = true;
+    _error = null;
     notifyListeners();
 
     try {
       final headers = {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer $_apiKey',
+        'Authorization': 'Bearer ${apiConfig.apiKey}',
       };
 
       final prompt = '''
-        你是我的课堂助手。老师正在提问，我需要一个合适的回答。
+        老师提问：$question
+        ${context != null ? '上下文：$context' : ''}
         
-        老师的问题或上下文：$context
-        
-        具体问题：$question
-        
-        请提供一个简洁、准确、专业的回答。如果问题需要具体知识，请基于常识给出合理回答。
-        格式要求：
-        1. 直接给出答案
-        2. 保持简洁（最多3句话）
-        3. 使用中文回答
-        4. 如果是开放性问题，提供思考方向
+        请提供一个适合学生回答的简洁答案（最多3句话）：
       ''';
 
       final body = {
-        'model': _selectedModel,
+        'model': apiConfig.selectedModel,
         'messages': [
           {
             'role': 'system',
-            'content': '你是一个专业的课堂助手，帮助学生在课堂上回答问题。'
+            'content': '你是一个课堂助手，帮助学生回答老师的问题。回答要简洁、准确、适合学生身份。'
           },
-          {
-            'role': 'user',
-            'content': prompt
-          }
+          {'role': 'user', 'content': prompt}
         ],
-        'max_tokens': 500,
+        'max_tokens': 200,
         'temperature': 0.7,
       };
 
       final response = await http.post(
-        Uri.parse(_apiUrl),
+        Uri.parse(apiConfig.apiUrl),
         headers: headers,
         body: jsonEncode(body),
-      );
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final content = data['choices'][0]['message']['content'];
+        final content = data['choices'][0]['message']['content'].trim();
         _currentResponse = content;
-        _isLoading = false;
-        notifyListeners();
-        return content;
+
+        _history.add({
+          'question': question,
+          'answer': content,
+          'time': DateTime.now().toString(),
+        });
+
+        if (_history.length > 10) {
+          _history.removeAt(0);
+        }
       } else {
-        _isLoading = false;
-        notifyListeners();
-        return 'API请求失败: ${response.statusCode}';
+        _error = '请求失败: ${response.statusCode}';
+        if (kDebugMode) {
+          print('API错误: ${response.body}');
+        }
       }
     } catch (e) {
-      _isLoading = false;
-      notifyListeners();
+      _error = '请求失败: ${e.toString()}';
       if (kDebugMode) {
         print('AI服务错误: $e');
       }
-      return '请求失败: $e';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
+
+    return _currentResponse;
   }
 
   void clearResponse() {
     _currentResponse = '';
+    _error = null;
     notifyListeners();
+  }
+
+  void clearHistory() {
+    _history.clear();
+    notifyListeners();
+  }
+
+  void retryLastRequest(String lastQuestion) {
+    if (lastQuestion.isNotEmpty) {
+      getAIResponse(lastQuestion);
+    }
   }
 }

@@ -1,10 +1,13 @@
+// home_page.dart (更新后的文件)
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:voice_ai/services/ai_service.dart';
 import 'package:voice_ai/services/keyword_detector.dart';
 import 'package:voice_ai/widgets/recording_widget.dart';
-import 'package:voice_ai/widgets/ai_response_widget.dart';
+import 'package:voice_ai/config/api_config.dart';
+import 'package:voice_ai/widgets/ai_response_widget.dart'; // 添加这行
 
+// home_page.dart 上半部分还需要修复 API 状态显示
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -14,9 +17,17 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   String _currentQuestion = '';
+  final TextEditingController _questionController = TextEditingController();
+
+  @override
+  void dispose() {
+    _questionController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final apiConfig = context.watch<APIConfig>();
     final keywordDetector = context.watch<KeywordDetectorService>();
     final aiService = context.watch<AIService>();
 
@@ -43,7 +54,7 @@ class _HomePageState extends State<HomePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 用户信息卡片
+              // 状态卡片
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -69,8 +80,19 @@ class _HomePageState extends State<HomePage> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '灵敏度: ${(keywordDetector.sensitivity * 100).toInt()}%',
-                            style: const TextStyle(fontSize: 12),
+                            'API状态: ${apiConfig.isConfigured ? '已配置' : '未配置'}',
+                            style: TextStyle(
+                              color: apiConfig.isConfigured ? Colors.green : Colors.red,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '模型: ${apiConfig.selectedModel}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.blue,
+                            ),
                           ),
                         ],
                       ),
@@ -94,8 +116,8 @@ class _HomePageState extends State<HomePage> {
                 onKeywordDetected: (text) {
                   setState(() {
                     _currentQuestion = text;
+                    _questionController.text = text;
                   });
-                  // 自动触发AI回答
                   if (text.isNotEmpty) {
                     aiService.getAIResponse(text);
                   }
@@ -129,6 +151,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                     const SizedBox(height: 12),
                     TextField(
+                      controller: _questionController,
                       maxLines: 3,
                       decoration: InputDecoration(
                         hintText: '请输入老师的问题...',
@@ -144,7 +167,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                     const SizedBox(height: 12),
                     ElevatedButton(
-                      onPressed: _currentQuestion.isNotEmpty
+                      onPressed: _currentQuestion.isNotEmpty && apiConfig.isConfigured
                           ? () {
                         aiService.getAIResponse(_currentQuestion);
                       }
@@ -157,6 +180,14 @@ class _HomePageState extends State<HomePage> {
                       ),
                       child: const Text('获取AI回答'),
                     ),
+                    if (!apiConfig.isConfigured)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          '请先配置API密钥',
+                          style: TextStyle(color: Colors.orange.shade700),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -169,30 +200,46 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          // 清除所有内容
-          setState(() {
-            _currentQuestion = '';
-          });
-          aiService.clearResponse();
-        },
-        icon: const Icon(Icons.refresh),
-        label: const Text('清空'),
-        backgroundColor: Colors.blue,
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          if (aiService.error != null)
+            FloatingActionButton(
+              onPressed: () {
+                aiService.retryLastRequest(_currentQuestion);
+              },
+              backgroundColor: Colors.orange,
+              mini: true,
+              child: const Icon(Icons.refresh),
+            ),
+          const SizedBox(height: 10),
+          FloatingActionButton.extended(
+            onPressed: () {
+              setState(() {
+                _currentQuestion = '';
+                _questionController.clear();
+              });
+              aiService.clearResponse();
+            },
+            icon: const Icon(Icons.refresh),
+            label: const Text('清空'),
+            backgroundColor: Colors.blue,
+          ),
+        ],
       ),
     );
   }
 }
 
+// home_page.dart (修复 SettingsPage 部分)
 // 设置页面
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final apiConfig = context.watch<APIConfig>();
     final keywordDetector = context.watch<KeywordDetectorService>();
-    final aiService = context.watch<AIService>();
 
     return Scaffold(
       appBar: AppBar(
@@ -202,6 +249,87 @@ class SettingsPage extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: ListView(
           children: [
+            // API设置
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(15),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 5,
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'API设置',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    initialValue: apiConfig.apiKey, // 修复：改为 apiKey
+                    decoration: InputDecoration(
+                      labelText: 'DeepSeek API密钥',
+                      border: const OutlineInputBorder(),
+                      hintText: '输入你的DeepSeek API密钥',
+                      suffixIcon: IconButton(
+                        icon: Icon(apiConfig.isConfigured
+                            ? Icons.check_circle
+                            : Icons.warning),
+                        color: apiConfig.isConfigured ? Colors.green : Colors.orange,
+                        onPressed: () {},
+                      ),
+                    ),
+                    obscureText: true,
+                    onChanged: (value) {
+                      apiConfig.saveAPIKey(value);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: apiConfig.selectedModel,
+                    decoration: const InputDecoration(labelText: 'AI模型'),
+                    items: apiConfig.availableModels
+                        .map((model) => DropdownMenuItem(
+                      value: model,
+                      child: Text(model),
+                    ))
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        apiConfig.updateModel(value);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  if (apiConfig.isConfigured)
+                    Text(
+                      '当前密钥: ${apiConfig.getMaskedKey()}',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: () {
+                      apiConfig.clearAPIKey();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.withOpacity(0.1),
+                      foregroundColor: Colors.red,
+                    ),
+                    child: const Text('清除API密钥'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
             // 关键词设置
             Container(
               padding: const EdgeInsets.all(16),
@@ -256,62 +384,6 @@ class SettingsPage extends StatelessWidget {
                     onChanged: (value) {
                       keywordDetector.saveSettings(isEnabled: value);
                     },
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // AI设置
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(15),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 5,
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'AI设置',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    initialValue: aiService.currentResponse,
-                    maxLines: 3,
-                    decoration: InputDecoration(
-                      labelText: 'OpenAI API密钥',
-                      border: const OutlineInputBorder(),
-                      hintText: 'sk-...',
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.visibility_off),
-                        onPressed: () {
-                          // 切换可见性
-                        },
-                      ),
-                    ),
-                    obscureText: true,
-                    onChanged: (value) {
-                      aiService.saveApiKey(value);
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    '注意：API密钥仅存储在本地设备上',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey,
-                    ),
                   ),
                 ],
               ),

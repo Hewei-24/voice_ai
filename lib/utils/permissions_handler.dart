@@ -1,3 +1,4 @@
+// permissions_handler.dart
 import 'package:permission_handler/permission_handler.dart';
 
 class PermissionsHandler {
@@ -21,7 +22,8 @@ class PermissionsHandler {
     return micGranted && storageGranted;
   }
 
-  static Future<void> openAppSettings() async {
+  // 修复：添加一个静态方法来打开应用设置
+  static Future<void> openSystemSettings() async {
     await openAppSettings();
   }
 }
