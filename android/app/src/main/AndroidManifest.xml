@@ -1,5 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.example.voice_ai">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- 添加这些权限 -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />

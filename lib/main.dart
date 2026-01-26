@@ -21,7 +21,16 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => APIConfig()),
         ChangeNotifierProvider(create: (_) => SpeechToTextService()),
         ChangeNotifierProvider(create: (_) => KeywordDetectorService()),
-        ChangeNotifierProvider(create: (_) => AIService()),
+        ChangeNotifierProxyProvider<APIConfig, AIService>(
+          create: (context) => AIService(context.read<APIConfig>()),
+          update: (context, apiConfig, aiService) {
+            if (aiService == null) {
+              return AIService(apiConfig);
+            }
+            aiService.updateConfig(apiConfig);
+            return aiService;
+          },
+        ),
       ],
       child: MaterialApp(
         title: 'Voice AI课堂助手',

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:voice_ai/services/ai_service.dart';
 import 'package:voice_ai/services/keyword_detector.dart';
+import 'package:voice_ai/services/speech_to_text.dart';
 import 'package:voice_ai/widgets/recording_widget.dart';
 import 'package:voice_ai/config/api_config.dart';
 import 'package:voice_ai/widgets/ai_response_widget.dart'; // 添加这行
@@ -82,7 +83,9 @@ class _HomePageState extends State<HomePage> {
                           Text(
                             'API状态: ${apiConfig.isConfigured ? '已配置' : '未配置'}',
                             style: TextStyle(
-                              color: apiConfig.isConfigured ? Colors.green : Colors.red,
+                              color: apiConfig.isConfigured
+                                  ? Colors.green
+                                  : Colors.red,
                               fontSize: 12,
                             ),
                           ),
@@ -167,11 +170,12 @@ class _HomePageState extends State<HomePage> {
                     ),
                     const SizedBox(height: 12),
                     ElevatedButton(
-                      onPressed: _currentQuestion.isNotEmpty && apiConfig.isConfigured
-                          ? () {
-                        aiService.getAIResponse(_currentQuestion);
-                      }
-                          : null,
+                      onPressed:
+                          _currentQuestion.isNotEmpty && apiConfig.isConfigured
+                              ? () {
+                                  aiService.getAIResponse(_currentQuestion);
+                                }
+                              : null,
                       style: ElevatedButton.styleFrom(
                         minimumSize: const Size(double.infinity, 50),
                         shape: RoundedRectangleBorder(
@@ -205,6 +209,7 @@ class _HomePageState extends State<HomePage> {
         children: [
           if (aiService.error != null)
             FloatingActionButton(
+              heroTag: 'retry_fab',
               onPressed: () {
                 aiService.retryLastRequest(_currentQuestion);
               },
@@ -214,11 +219,13 @@ class _HomePageState extends State<HomePage> {
             ),
           const SizedBox(height: 10),
           FloatingActionButton.extended(
+            heroTag: 'clear_fab',
             onPressed: () {
               setState(() {
                 _currentQuestion = '';
                 _questionController.clear();
               });
+              context.read<SpeechToTextService>().clearText();
               aiService.clearResponse();
             },
             icon: const Icon(Icons.refresh),
@@ -283,7 +290,9 @@ class SettingsPage extends StatelessWidget {
                         icon: Icon(apiConfig.isConfigured
                             ? Icons.check_circle
                             : Icons.warning),
-                        color: apiConfig.isConfigured ? Colors.green : Colors.orange,
+                        color: apiConfig.isConfigured
+                            ? Colors.green
+                            : Colors.orange,
                         onPressed: () {},
                       ),
                     ),
@@ -298,9 +307,9 @@ class SettingsPage extends StatelessWidget {
                     decoration: const InputDecoration(labelText: 'AI模型'),
                     items: apiConfig.availableModels
                         .map((model) => DropdownMenuItem(
-                      value: model,
-                      child: Text(model),
-                    ))
+                              value: model,
+                              child: Text(model),
+                            ))
                         .toList(),
                     onChanged: (value) {
                       if (value != null) {
@@ -432,7 +441,7 @@ class SettingsPage extends StatelessWidget {
                   ListTile(
                     leading: Icon(Icons.security, color: Colors.red),
                     title: Text('隐私保护'),
-                    subtitle: Text('所有语音数据仅在本地处理，不会上传到服务器'),
+                    subtitle: Text('语音仅在本地识别，文本问题会发送到AI服务'),
                   ),
                 ],
               ),

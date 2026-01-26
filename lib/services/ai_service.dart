@@ -5,6 +5,9 @@ import 'package:http/http.dart' as http;
 import 'package:voice_ai/config/api_config.dart';
 
 class AIService extends ChangeNotifier {
+  AIService(this._apiConfig);
+
+  APIConfig _apiConfig;
   String _currentResponse = '';
   bool _isLoading = false;
   String? _error;
@@ -15,10 +18,12 @@ class AIService extends ChangeNotifier {
   String? get error => _error;
   List<Map<String, String>> get history => _history;
 
-  Future<String> getAIResponse(String question, {String? context}) async {
-    final apiConfig = APIConfig();
+  void updateConfig(APIConfig apiConfig) {
+    _apiConfig = apiConfig;
+  }
 
-    if (!apiConfig.isConfigured) {
+  Future<String> getAIResponse(String question, {String? context}) async {
+    if (!_apiConfig.isConfigured) {
       _error = '请先在设置中配置有效的API密钥';
       notifyListeners();
       return _error!;
@@ -31,7 +36,7 @@ class AIService extends ChangeNotifier {
     try {
       final headers = {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ${apiConfig.apiKey}',
+        'Authorization': 'Bearer ${_apiConfig.apiKey}',
       };
 
       final prompt = '''
@@ -42,7 +47,7 @@ class AIService extends ChangeNotifier {
       ''';
 
       final body = {
-        'model': apiConfig.selectedModel,
+        'model': _apiConfig.selectedModel,
         'messages': [
           {
             'role': 'system',
@@ -55,7 +60,7 @@ class AIService extends ChangeNotifier {
       };
 
       final response = await http.post(
-        Uri.parse(apiConfig.apiUrl),
+        Uri.parse(_apiConfig.apiUrl),
         headers: headers,
         body: jsonEncode(body),
       ).timeout(const Duration(seconds: 30));
